@@ -21,7 +21,7 @@
 
 -mod_title("GeoMap services").
 -mod_description("Maps, mapping, geocoding and geo calculations..").
--mod_prio(1200).
+-mod_prio(500).
 -mod_depends([mod_l10n]).
 
 -export([
