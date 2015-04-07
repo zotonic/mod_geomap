@@ -1,8 +1,8 @@
 %% @author Marc Worrell <marc@worrell.nl>
-%% @copyright 2012 Marc Worrell
+%% @copyright 2012-2015 Marc Worrell
 %% @doc Return the JSON for the country overview.
 
-%% Copyright 2012 Marc Worrell
+%% Copyright 2012-2015 Marc Worrell
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -42,13 +42,18 @@ get_data(Context) ->
     Data = lists:foldl(fun(Id, Acc) ->
                             case z_acl:rsc_visible(Id, Context) of
                                 true ->
-                                    [{m_rsc:p(Id, address_country, Context), {
-                                            Id,
-                                            z_trans:lookup_fallback(m_rsc:p(Id, title, Context), Context),
-                                            m_rsc:p(Id, map_color, Context), 
-                                            m_rsc:p(Id, map_value, Context)
-                                        }
-                                    } | Acc];
+                                    case maybe_map_iso(m_rsc:p(Id, address_country, Context)) of
+                                        undefined ->
+                                            Acc;
+                                        Iso ->
+                                            [{Iso, {
+                                                    Id,
+                                                    z_trans:lookup_fallback(m_rsc:p(Id, title, Context), Context),
+                                                    m_rsc:p(Id, map_color, Context), 
+                                                    m_rsc:p(Id, map_value, Context)
+                                                }
+                                            } | Acc]
+                                    end;
                                 false ->
                                     Acc
                             end
@@ -88,29 +93,41 @@ set_values({struct, [{<<"type">>,<<"FeatureCollection">>}, {<<"features">>, Cs}]
 set_value({struct, Fs}, Data) ->
     {struct, Properties} = proplists:get_value(<<"properties">>, Fs),
     Name = proplists:get_value(<<"name">>, Properties),
-    case l10n_country2iso:country2iso(Name) of
+    P1 = case l10n_country2iso:country2iso(Name) of
+        undefined when Name =/= <<>> ->
+            lager:info("[mod_geomap] country ~p is unknown - not mapped to an iso code.", [Name]),
+            {<<"properties">>,
+               {struct,[{<<"name">>,Name},
+                        {<<"value">>,<<"">>},
+                        {<<"colour">>,<<"#ccc">>}
+                ]}
+            };
         undefined ->
-            P1 = {<<"properties">>,
+            {<<"properties">>,
                {struct,[{<<"name">>,Name},
                         {<<"value">>,<<"">>},
                         {<<"colour">>,<<"#ccc">>}
                 ]}
             };
         Iso ->
-            case proplists:get_value(Iso, Data) of
-                {RscId, Title, Colour, Value} ->
-                    P1 = {<<"properties">>,
-                       {struct,[{<<"rsc_id">>, RscId},
-                                {<<"name">>,Title},
-                                {<<"value">>,value(Value)},
-                                {<<"colour">>, color(Colour)}
-                        ]}
-                    };
-                undefined ->
-                    P1 = {<<"properties">>,
+            case proplists:get_all_values(Iso, Data) of
+                [] ->
+                    {<<"properties">>,
                        {struct,[{<<"name">>,l10n_iso2country:iso2country(Iso)},
                                 {<<"value">>,<<"">>},
                                 {<<"colour">>,<<"#ccc">>}
+                        ]}
+                    };
+                Cs ->
+                    [{_RscId, _Title, Colour, Value}|_] = Cs,
+                    Titles = [ element(2,C) || C <- Cs ],
+                    RscIds = [ element(1,C) || C <- Cs ],
+                    Title = iolist_to_binary(z_utils:combine(<<"<br/>">>, Titles)),
+                    {<<"properties">>,
+                       {struct,[{<<"rsc_ids">>, RscIds},
+                                {<<"name">>, Title},
+                                {<<"value">>,value(Value)},
+                                {<<"colour">>, color(Colour)}
                         ]}
                     }
             end
@@ -118,10 +135,15 @@ set_value({struct, Fs}, Data) ->
     {ok, {struct, [ P1 | proplists:delete(<<"properties">>, Fs) ]}}.
 
 
-    color(undefined) -> <<"#ccc">>;
-    color(<<>>) -> <<"#ccc">>;
-    color(C) -> C.
-    
-    value(undefined) -> <<"">>;
-    value(V) -> V.
+% Some countries don't have a map representation. Combine them with a close other country.
+maybe_map_iso(<<"sx">>) -> <<"mf">>;       % Saint Martin - other half of the island
+maybe_map_iso(Iso) -> Iso.
+
+
+color(undefined) -> <<"#ccc">>;
+color(<<>>) -> <<"#ccc">>;
+color(C) -> C.
+
+value(undefined) -> <<"">>;
+value(V) -> V.
 

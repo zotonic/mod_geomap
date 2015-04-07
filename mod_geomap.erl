@@ -37,6 +37,18 @@
 
 -include_lib("zotonic.hrl").
 
+
+%% @doc Popup the geomap information
+event(#postback_notify{message="geomap_popup", target=TargetId}, Context) ->
+    Ids = [ z_context:get_q("id", Context) | z_context:get_q("ids", Context, []) ],
+    Ids1 = [ m_rsc:rid(Id, Context) || Id <- Ids ],
+    Ids2 = lists:filter(fun
+                            (undefined) -> false;
+                            (Id) -> m_rsc:is_visible(Id, Context)
+                        end,
+                        Ids1),
+    z_render:update(TargetId, #render{template="_geomap_popup.tpl", vars=[{ids, Ids2}]}, Context);
+
 %% @doc Handle an address lookup from the admin.
 %% @todo Maybe add check if the user is allowed to use the admin.
 event(#postback_notify{message="address_lookup"}, Context) ->
@@ -158,7 +170,8 @@ find_geocode(Q, Type, Context) ->
         {ok, {_, _}} = OK ->
             OK;
         {error, notfound} ->
-            find_geocode_api(Q, Type, Context) 
+            Q1 = maybe_expand_country(Q, Type, Context),
+            find_geocode_api(Q1, Type, Context) 
     end.
 
 %% @doc Check with Google and OpenStreetMap if they know the address
@@ -215,7 +228,7 @@ googlemaps_check(Q, Context) ->
     end.
 
 googlemaps(Q) ->
-    Url = "http://maps.googleapis.com/maps/api/geocode/json?sensor=false&address="++Q,
+    Url = "https://maps.googleapis.com/maps/api/geocode/json?sensor=false&address="++Q,
     case get_json(Url) of
         {ok, []} ->
             lager:debug("Google maps empty return for ~p", [Q]),
@@ -310,6 +323,10 @@ p(F, Sep, R) ->
         V -> [V, Sep]
     end.
 
+maybe_expand_country(Country, country, Context) ->
+    country_name(Country, Context);
+maybe_expand_country(Address, full, _Context) ->
+    Address.
 
 country_name([], _Context) -> <<>>;
 country_name(<<>>, _Context) -> <<>>;
