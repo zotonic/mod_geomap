@@ -40,7 +40,7 @@
 
 %% @doc Popup the geomap information
 event(#postback_notify{message="geomap_popup", target=TargetId}, Context) ->
-    Ids = [ z_context:get_q("id", Context) | z_context:get_q("ids", Context, []) ],
+    Ids = [ z_context:get_q("id", Context) | get_ids(Context) ],
     Ids1 = [ m_rsc:rid(Id, Context) || Id <- Ids ],
     Ids2 = lists:filter(fun
                             (undefined) -> false;
@@ -65,6 +65,9 @@ event(#postback_notify{message="address_lookup"}, Context) ->
         {ok, {Lat, Long}} ->
             z_script:add_script(io_lib:format("map_mark_location(~p,~p);", [Long, Lat]), Context)
     end.
+
+get_ids(Context) ->
+    string:tokens(z_context:get_q("ids", Context, []), ",").
 
 
 %% @doc Append computed latitude and longitude values to the resource.
