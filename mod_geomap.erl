@@ -1,8 +1,8 @@
 %% @author Marc Worrell <marc@worrell.nl>
-%% @copyright 2012 Marc Worrell
-%% @doc Calculate a quadtile code from a lat/long location.
+%% @copyright 2012-2016 Marc Worrell
+%% @doc Geo mapping support using OpenStreetMaps
 
-%% Copyright 2012 Marc Worrell
+%% Copyright 2012-2016 Marc Worrell
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -147,7 +147,7 @@ optional_geocode(R, Context) ->
                 {ok, _, <<>>} ->
                     reset;
                 {ok, Type, Q} ->
-                    LocHash = crypto:md5(Q),
+                    LocHash = crypto:hash(md5, Q),
                     case proplists:get_value(pivot_geocode_qhash, R) of
                         LocHash ->
                             % Not changed since last lookup 
@@ -302,7 +302,7 @@ get_json(Url) ->
 
 q(R, Context) ->
     Fs = iolist_to_binary([
-        p(address_street1, $,, R),
+        p(address_street_1, $,, R),
         p(address_city, $,, R),
         p(address_state, $,, R),
         p(address_postcode, $,, R)

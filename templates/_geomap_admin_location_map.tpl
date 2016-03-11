@@ -2,23 +2,27 @@
 
 {% with m.rsc[id].computed_location_lat as latitude %}
 {% with m.rsc[id].computed_location_lng as longitude %}
-<div class="control-group">
-	<label for="location_lat" class="control-label">{_ Latitude _}</label>
-	<div class="controls">
-		<input id="location_lat" type="text" name="location_lat" value="{{ m.rsc[id].location_lat }}" class="input-medium" />
-        <span class="help-inline">{_ indexed _}: {{ latitude }}</span>
-	</div>
+<div class="row">
+    <div class="form-group col-md-6">
+    	<label for="location_lat" class="control-label">{_ Latitude _}</label>
+		<input id="location_lat" type="text" name="location_lat" value="{{ m.rsc[id].location_lat }}" class="form-control" />
+        {% if id %}
+            <span class="text-muted">{_ indexed _}: {{ latitude|default:"-" }}</span>
+        {% endif %}
+    </div>
+
+    <div class="form-group col-md-6">
+    	<label for="location_lng" class="control-label">{_ Longitude _}</label>
+    	<div class="controls">
+    		<input id="location_lng" type="text" name="location_lng" value="{{ m.rsc[id].location_lng }}" class="form-control" />
+            {% if id %}
+        		<span class="text-muted">{_ indexed _}: {{ longitude|default:"-" }}</span>
+            {% endif %}
+    	</div>
+    </div>
 </div>
 
-<div class="control-group">
-	<label for="location_lng" class="control-label">{_ Longitude _}</label>
-	<div class="controls">
-		<input id="location_lng" type="text" name="location_lng" value="{{ m.rsc[id].location_lng }}" class="input-medium" />
-		<span class="help-inline">{_ indexed _}: {{ longitude }}</span>
-	</div>
-</div>
-
-<div class="well">
+<div class="form-group">
 	<button class="btn" id="location_me"><i class="icon-screenshot"></i> {_ Set to current location _}</button>
 	<button class="btn" id="location_address"><i class="icon-screenshot"></i> {_ Set to entered address _}</button>
 	<button class="btn" id="location_clear">{_ Clear _}</button>
@@ -30,9 +34,9 @@
 <p class="help-inline">{_ Please click on the map to select the location. _}</p>
 
 {% javascript %}
-{# disable the 'entered address' button when there is no address on the edit page #}
+{# Hide the 'entered address' button when there is no address on the edit page #}
 if ($('#address_country').length == 0) {
-    $('#location_address').addClass('disabled');
+    $('#location_address').hide();
 }
 
 {# Initialize the map, with a timeout function so that the interface works before the map is loaded #}
@@ -161,7 +165,7 @@ $('#location_reset').click(function(ev) {
     $('#location_lng').val('{{ m.rsc[id].location_lng }}');
     var latitude = parseFloat('{{ m.rsc[id].computed_location_lat }}');
     var longitude = parseFloat('{{ m.rsc[id].computed_location_lng }}');
-    if (latitude != NaN && longitude != NaN) {
+    if (!isNaN(latitude) && !isNaN(longitude)) {
         map_mark_location(longitude, latitude);
     }
     ev.preventDefault();

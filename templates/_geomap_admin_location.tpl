@@ -2,7 +2,7 @@
 
 {# A map admin_edit widget #}
 
-{% block widget_title %}{_ Geodata _}{% endblock %}
+{% block widget_title %}{_ Geolocation _}{% endblock %}
 {% block widget_show_minimized %}true{% endblock %}
 {% block widget_id %}content-location{% endblock %}
 
