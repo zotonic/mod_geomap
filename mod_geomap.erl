@@ -31,12 +31,26 @@
     observe_pivot_update/3,
     observe_pivot_fields/3,
 
+    observe_postback_notify/2,
+
     find_geocode/3,
     find_geocode_api/3
 ]).
 
 -include_lib("zotonic.hrl").
 
+
+observe_postback_notify(#postback_notify{message="geomap_cluster", target=TargetId}, Context) ->
+    Ids = [ z_context:get_q("id", Context) | z_context:get_q("ids", Context, []) ],
+    Ids1 = [ m_rsc:rid(Id, Context) || Id <- Ids ],
+    Ids2 = lists:filter(fun
+                            (undefined) -> false;
+                            (Id) -> is_integer(Id) andalso m_rsc:is_visible(Id, Context)
+                        end,
+                        Ids1),
+    z_render:update(TargetId, #render{template="_geomap_popup_cluster.tpl", vars=[{ids, Ids2}]}, Context);
+observe_postback_notify(_, _Context) ->
+    undefined.
 
 %% @doc Popup the geomap information
 event(#postback_notify{message="geomap_popup", target=TargetId}, Context) ->
