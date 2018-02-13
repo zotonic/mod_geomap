@@ -312,7 +312,7 @@ q(R, Context) ->
         p(address_street_1, $,, R),
         p(address_city, $,, R),
         p(address_state, $,, R),
-        p(address_postcode, $,, R)
+        remove_ws(p(address_postcode, $,, R))
     ]),
     case Fs of
         <<>> ->
@@ -321,6 +321,9 @@ q(R, Context) ->
             Country = iolist_to_binary(country_name(proplists:get_value(address_country, R), Context)),
             {ok, full, <<Fs/binary, Country/binary>>}
     end.
+
+remove_ws(V) ->
+    binary:replace( iolist_to_binary(V), <<" ">>, <<>>, [global] ).
 
 p(F, Sep, R) ->
     case proplists:get_value(F, R) of
