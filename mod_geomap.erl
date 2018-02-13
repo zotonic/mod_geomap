@@ -178,22 +178,22 @@ find_geocode(Q, Type, Context) ->
     end.
 
 %% @doc Check with Google and OpenStreetMap if they know the address
-find_geocode_api(Q, country, _Context) ->
+find_geocode_api(Q, country, Context) ->
     Qq = mochiweb_util:quote_plus(Q),
-    openstreetmap(Qq);
+    openstreetmap(Qq, Context);
 find_geocode_api(Q, _Type, Context) ->
     Qq = mochiweb_util:quote_plus(Q),
     case googlemaps_check(Qq, Context) of
         {error, _} ->
-            openstreetmap(Qq);
+            openstreetmap(Qq, Context);
         {ok, {_Lat, _Long}} = Ok->
             Ok
     end.
 
-        
-openstreetmap(Q) ->
+
+openstreetmap(Q, Context) ->
     Url = "http://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=0&q="++Q,
-    case get_json(Url) of
+    case get_json(Url, Context) of
         {ok, [{struct, Props}|_]} ->
             case {z_convert:to_float(proplists:get_value(<<"lat">>, Props)),
                   z_convert:to_float(proplists:get_value(<<"lon">>, Props))}
@@ -217,7 +217,7 @@ openstreetmap(Q) ->
 googlemaps_check(Q, Context) ->
     case z_depcache:get(googlemaps_error, Context) of
         undefined ->
-            case googlemaps(Q) of
+            case googlemaps(Q, Context) of
                 {error, query_limit} = Error ->
                     lager:warning("Geomap: Google reached query limit, disabling for 1800 sec"),
                     z_depcache:set(googlemaps_error, Error, 1800, Context),
@@ -230,9 +230,9 @@ googlemaps_check(Q, Context) ->
             Error
     end.
 
-googlemaps(Q) ->
+googlemaps(Q, Context) ->
     Url = "https://maps.googleapis.com/maps/api/geocode/json?sensor=false&address="++Q,
-    case get_json(Url) of
+    case get_json(Url, Context) of
         {ok, []} ->
             lager:debug("Google maps empty return for ~p", [Q]),
             {error, not_found};
@@ -277,10 +277,12 @@ googlemaps(Q) ->
     end.
 
 
-
-get_json(Url) ->
-    lager:debug("Geo lookup: ~p", [Url]),
-    case httpc:request(get, {Url, []}, [{autoredirect, true}, {relaxed, true}, {timeout, 10000}], []) of
+get_json(Url, Context) ->
+    Hs = [
+        {"referer", z_convert:to_list(z_context:abs_url("/", Context))},
+        {"User-Agent", "Zotonic"}
+    ],
+    case httpc:request(get, {Url, Hs}, [{autoredirect, true}, {relaxed, true}, {timeout, 10000}], []) of
         {ok, {
             {_HTTP, 200, _OK},
             Headers,
@@ -292,20 +294,22 @@ get_json(Url) ->
                 CT ->
                     {error, {unexpected_content_type, CT}}
             end;
-        {error, _Reason} = Err ->
-            Err;
         {ok, {{_, 503, _}, _, _}} ->
             {error, no_service};
         {ok, {{_, 404, _}, _, _}} ->
             {error, not_found};
-        {ok, _Other} ->
-            {error, unexpected_result}
+        {ok, Other} ->
+            lager:warning("Unexpected result from ~p: ~p",
+                          [Url, Other]),
+            {error, unexpected_result};
+        {error, _Reason} = Err ->
+            Err
     end.
 
 
 q(R, Context) ->
     Fs = iolist_to_binary([
-        p(address_street1, $,, R),
+        p(address_street_1, $,, R),
         p(address_city, $,, R),
         p(address_state, $,, R),
         p(address_postcode, $,, R)
