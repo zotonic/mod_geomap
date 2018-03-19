@@ -203,7 +203,7 @@ find_geocode_api(Q, _Type, Context) ->
 
 
 openstreetmap(Q, Context) ->
-    Url = "http://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=0&q="++Q,
+    Url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=0&q="++Q,
     case get_json(Url, Context) of
         {ok, [{struct, Props}|_]} ->
             case {z_convert:to_float(proplists:get_value(<<"lat">>, Props)),
