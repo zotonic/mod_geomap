@@ -7,9 +7,9 @@
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
 %% You may obtain a copy of the License at
-%% 
+%%
 %%     http://www.apache.org/licenses/LICENSE-2.0
-%% 
+%%
 %% Unless required by applicable law or agreed to in writing, software
 %% distributed under the License is distributed on an "AS IS" BASIS,
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -26,8 +26,9 @@
 
 -export([
     event/2,
-    
+
     observe_rsc_get/3,
+    observe_search_query/2,
     observe_pivot_update/3,
     observe_pivot_fields/3,
 
@@ -84,7 +85,7 @@ event(#postback_notify{message="address_lookup"}, Context) ->
 %% @doc Append computed latitude and longitude values to the resource.
 observe_rsc_get(#rsc_get{}, Props, _Context) ->
     case proplists:get_value(pivot_geocode, Props) of
-        undefined -> 
+        undefined ->
             Props;
         Quadtile ->
             {Lat, Long} = geomap_quadtile:decode(Quadtile),
@@ -95,6 +96,8 @@ observe_rsc_get(#rsc_get{}, Props, _Context) ->
             ]
     end.
 
+observe_search_query(#search_query{}=Q, Context) ->
+    geomap_search:search_query(Q, Context).
 
 %% @doc Check if the latitude/longitude are set, if so the pivot the pivot_geocode.
 %%      If not then try to derive the lat/long from the rsc's address data.
@@ -103,12 +106,12 @@ observe_pivot_update(#pivot_update{}, KVs, _Context) ->
           catch z_convert:to_float(proplists:get_value(location_lng, KVs))}
     of
         {Lat, Long} when is_float(Lat), is_float(Long) ->
-            [ 
+            [
                 {pivot_geocode, geomap_quadtile:encode(Lat, Long)},
                 {pivot_geocode_qhash, undefined}
                 | KVs
             ];
-        _ -> 
+        _ ->
             KVs
     end.
 
@@ -120,28 +123,28 @@ observe_pivot_fields(#pivot_fields{rsc=R}, KVs, Context) ->
           catch z_convert:to_float(proplists:get_value(location_lng, R))}
     of
         {Lat, Long} when is_float(Lat), is_float(Long) ->
-            [ 
+            [
                 {pivot_geocode, geomap_quadtile:encode(Lat, Long)},
-                {pivot_geocode_qhash, undefined} 
+                {pivot_geocode_qhash, undefined}
                 | KVs
             ];
         _ ->
             % Optionally geocode the address in the resource.
             % When successful this will spawn a new geocode pivot.
             case optional_geocode(R, Context) of
-                reset -> 
-                    [ 
+                reset ->
+                    [
                         {pivot_geocode, undefined},
-                        {pivot_geocode_qhash, undefined} 
+                        {pivot_geocode_qhash, undefined}
                         | KVs
                     ];
                 {ok, Lat, Long, QHash} ->
-                    [ 
+                    [
                         {pivot_geocode, geomap_quadtile:encode(Lat, Long)},
-                        {pivot_geocode_qhash, QHash} 
+                        {pivot_geocode_qhash, QHash}
                         | KVs
                     ];
-                ok -> 
+                ok ->
                     KVs
             end
     end.
@@ -164,7 +167,7 @@ optional_geocode(R, Context) ->
                     LocHash = crypto:hash(md5, Q),
                     case proplists:get_value(pivot_geocode_qhash, R) of
                         LocHash ->
-                            % Not changed since last lookup 
+                            % Not changed since last lookup
                             ok;
                         _ ->
                             % Changed, and we are doing automatic lookups
@@ -185,7 +188,7 @@ find_geocode(Q, Type, Context) ->
             OK;
         {error, notfound} ->
             Q1 = maybe_expand_country(Q, Type, Context),
-            find_geocode_api(Q1, Type, Context) 
+            find_geocode_api(Q1, Type, Context)
     end.
 
 %% @doc Check with Google and OpenStreetMap if they know the address
@@ -236,7 +239,7 @@ googlemaps_check(Q, Context) ->
                 Result ->
                     Result
             end;
-        {ok, Error} -> 
+        {ok, Error} ->
             lager:debug("Geomap: skipping Google lookup due to ~p", [Error]),
             Error
     end.
@@ -328,7 +331,7 @@ q(R, Context) ->
     case Fs of
         <<>> ->
             {ok, country, iolist_to_binary(p(address_country, <<>>, R))};
-        _ -> 
+        _ ->
             Country = iolist_to_binary(country_name(proplists:get_value(address_country, R), Context)),
             {ok, full, <<Fs/binary, Country/binary>>}
     end.
