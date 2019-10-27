@@ -52,7 +52,7 @@ msgstr "Breedtegraad"
 #: ./modules/mod_geomap/templates/_geomap_admin_location_map.tpl:195 
 msgid ""
 "Location has been set."
-msgstr "Locatie is opgeslagen."
+msgstr "Locatie is ingesteld."
 
 #: ./modules/mod_geomap/templates/_geomap_admin_location_map.tpl:16 
 msgid ""

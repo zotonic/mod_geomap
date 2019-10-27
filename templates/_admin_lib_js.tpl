@@ -1,3 +1,5 @@
 {# Javascript files for the admin #}
-{% lib "js/openlayers/OpenLayers.js" %}
-
+{% lib
+    "js/openlayers/ol.js"
+    "js/openlayers/z.geomap.js"
+%}
