@@ -129,9 +129,13 @@ setTimeout(function() {
         map_mark_location(coordinate[0], coordinate[1], 'click');
     });
 
+    var is_first_moveend = true;
     map.on('moveend', function(e) {
-      var newZoom = map.getView().getZoom();
-      $("#location_zoom_level").val( Math.round(newZoom) );
+        if (!is_first_moveend) {
+            var newZoom = map.getView().getZoom();
+            $("#location_zoom_level").val( Math.round(newZoom) );
+        }
+        is_first_moveend = false;
     });
 
 }, 100);
