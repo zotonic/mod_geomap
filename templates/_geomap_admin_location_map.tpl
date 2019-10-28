@@ -24,7 +24,8 @@
     <div class="form-group col-md-4">
         <label for="location_zoom_level" class="control-label">{_ Zoom Level _} (0 … 29)</label>
         <div class="controls">
-            <input id="location_zoom_level" type="number" name="location_zoom_level" value="{{ m.rsc[id].location_zoom_level }}" class="form-control" />
+            <input id="location_zoom_level" type="number" name="location_zoom_level" min="0" max="29"
+                   value="{{ m.rsc[id].location_zoom_level }}" class="form-control" />
         </div>
     </div>
 </div>
