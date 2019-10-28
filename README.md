@@ -20,6 +20,7 @@ This modules has the following configuration keys:
  * `mod_geomap.google_api_key` The API Key for Google Maps requests
  * `mod_geomap.location_lat` Default latitude for map views
  * `mod_geomap.location_lng` Default longitude for map views
+ * `mod_geomap.zoomlevel` Default zoomlevel for map views (0..29)
 
 
 Search query: geo_nearby

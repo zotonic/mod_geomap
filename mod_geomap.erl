@@ -125,29 +125,49 @@ observe_pivot_update(#pivot_update{}, KVs, _Context) ->
 %% @doc Check if the latitude/longitude are set, if so then pivot the pivot_geocode.
 %%      If not then try to derive the lat/long from the rsc's address data.
 observe_pivot_fields(#pivot_fields{ rsc = R }, KVs, Context) ->
-    case {catch z_convert:to_float(proplists:get_value(location_lat, R)),
-          catch z_convert:to_float(proplists:get_value(location_lng, R))}
-    of
-        {Lat, Long} when is_float(Lat), is_float(Long) ->
+    case {has_geoloc(R), has_pivot_geoloc(KVs)} of
+        {true, _} ->
+            % Directly derive from the hard coded location
+            Lat = z_convert:to_float(proplists:get_value(location_lat, R)),
+            Long = z_convert:to_float(proplists:get_value(location_lng, R)),
+            KVs1 = drop_ks([
+                pivot_geocode, pivot_geocode_qhash,
+                pivot_location_lat, pivot_location_lng ], KVs),
+            [
+                {pivot_geocode, geomap_quadtile:encode(Lat, Long)},
+                {pivot_geocode_qhash, undefined},
+                {pivot_location_lat, Lat},
+                {pivot_location_lng, Long}
+                | KVs1
+            ];
+        {false, true} ->
+            % Some other module derived a pivot location - keep that location
+            Lat = z_convert:to_float(proplists:get_value(pivot_location_lat, R)),
+            Long = z_convert:to_float(proplists:get_value(pivot_location_lng, R)),
+            KVs1 = drop_ks([ pivot_geocode, pivot_geocode_qhash ], KVs),
             [
                 {pivot_geocode, geomap_quadtile:encode(Lat, Long)},
                 {pivot_geocode_qhash, undefined}
-                | KVs
+                | KVs1
             ];
-        _ ->
+        {false, false} ->
             % Optionally geocode the address in the resource.
-            % When successful this will spawn a new geocode pivot.
             case optional_geocode(R, Context) of
                 reset ->
+                    KVs1 = drop_ks([
+                        pivot_geocode, pivot_geocode_qhash,
+                        pivot_location_lat, pivot_location_lng ], KVs),
                     [
                         {pivot_geocode, undefined},
-                        {pivot_geocode_qhash, undefined}
-                        | KVs
+                        {pivot_geocode_qhash, undefined},
+                        {pivot_location_lat, undefined},
+                        {pivot_location_lng, undefined}
+                        | KVs1
                     ];
                 {ok, Lat, Long, QHash} ->
-                    KVs1 = proplists:delete(
-                        pivot_location_lat,
-                        proplists:delete( pivot_location_lng, KVs)),
+                    KVs1 = drop_ks([
+                        pivot_geocode, pivot_geocode_qhash,
+                        pivot_location_lat, pivot_location_lng ], KVs),
                     [
                         {pivot_geocode, geomap_quadtile:encode(Lat, Long)},
                         {pivot_geocode_qhash, QHash},
@@ -159,6 +179,33 @@ observe_pivot_fields(#pivot_fields{ rsc = R }, KVs, Context) ->
                     KVs
             end
     end.
+
+drop_ks(Ks, KVs) ->
+    lists:foldl(
+        fun(K, Acc) ->
+            lists:keydelete(K, 1, Acc)
+        end,
+        KVs,
+        Ks).
+
+has_geoloc(R) ->
+    is_numerical( proplists:get_value(location_lat, R) )
+    andalso is_numerical( proplists:get_value(location_lng, R) ).
+
+has_pivot_geoloc(R) ->
+    is_numerical( proplists:get_value(pivot_location_lat, R) )
+    andalso is_numerical( proplists:get_value(pivot_location_lng, R) ).
+
+is_numerical(N) when is_number(N) -> true;
+is_numerical(undefined) -> false;
+is_numerical(<<>>) -> false;
+is_numerical(N) ->
+    try
+        is_number( z_convert:to_float(N) )
+    catch
+        _:_ -> false
+    end.
+
 
 
 %% @doc Check if we should lookup the location belonging to the resource.

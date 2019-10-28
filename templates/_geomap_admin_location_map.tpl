@@ -1,12 +1,9 @@
 {# This template is lazy loaded from the _geomap_admin_location.tpl #}
 
-<input id="location_zoom_level" type="hidden" name="location_zoom_level" value="{{ m.rsc[id].location_zoom_level }}" />
-
 {% with m.rsc[id].computed_location_lat as latitude %}
 {% with m.rsc[id].computed_location_lng as longitude %}
-{% with m.rsc[id].location_zoom_level|default:"15" as zoom_level %}
 <div class="row">
-    <div class="form-group col-md-6">
+    <div class="form-group col-md-4">
     	<label for="location_lat" class="control-label">{_ Latitude _}</label>
 		<input id="location_lat" type="text" name="location_lat" value="{{ m.rsc[id].location_lat }}" class="form-control" />
         {% if id %}
@@ -14,7 +11,7 @@
         {% endif %}
     </div>
 
-    <div class="form-group col-md-6">
+    <div class="form-group col-md-4">
     	<label for="location_lng" class="control-label">{_ Longitude _}</label>
     	<div class="controls">
     		<input id="location_lng" type="text" name="location_lng" value="{{ m.rsc[id].location_lng }}" class="form-control" />
@@ -22,6 +19,13 @@
         		<span class="text-muted">{_ indexed _}: {{ longitude|default:"-" }}</span>
             {% endif %}
     	</div>
+    </div>
+
+    <div class="form-group col-md-4">
+        <label for="location_zoom_level" class="control-label">{_ Zoom Level _} (0 … 29)</label>
+        <div class="controls">
+            <input id="location_zoom_level" type="number" name="location_zoom_level" value="{{ m.rsc[id].location_zoom_level }}" class="form-control" />
+        </div>
     </div>
 </div>
 
@@ -46,6 +50,7 @@ if ($('#address_country').length == 0) {
 
 var map;
 var map_geolocate;
+var map_pin_layer;
 var map_pin_layer_feature;
 
 setTimeout(function() {
@@ -53,19 +58,20 @@ setTimeout(function() {
     /* Center the map on the current (calculated) position */
     {% if longitude|is_defined and latitude|is_defined %}
         var map_location = [
-            {{ longitude }},
-            {{ latitude }}
+            parseFloat("{{ longitude }}"),
+            parseFloat("{{ latitude }}")
         ];
-        var map_zoom = parseFloat("{{ m.rsc[id].location_zoom_level|default:zoom_level }}");
         var has_pin = true;
+        var map_zoom = parseFloat("{{ m.rsc[id].location_zoom_level|default:15 }}");
     {% else %}
         var map_location = [
             parseFloat("{{ m.config.mod_geomap.location_lng.value|default:0 }}"),
-            parseFloat("{{ m.config.mod_geomap.location_lat.value|default:0 }}")"
+            parseFloat("{{ m.config.mod_geomap.location_lat.value|default:0 }}")
         ];
-        var map_zoom = 2;
         var has_pin = false
+        var map_zoom = parseFloat("{{ m.rsc[id].location_zoom_level|default:m.config.mod_geomap.zoomlevel.value|default:15 }}");
     {% endif %}
+
     map_location = ol.proj.transform(map_location, 'EPSG:4326', 'EPSG:3857');
 
     var mapOptions = {
@@ -86,8 +92,7 @@ setTimeout(function() {
 
     if (has_pin) {
         map_pin_layer_feature = new ol.Feature(new ol.geom.Point(map_location))
-        map.addLayer(
-            new ol.layer.Vector ({
+        map_pin_layer = new ol.layer.Vector ({
               source: new ol.source.Vector ({
                 features: [ map_pin_layer_feature ]
               }),
@@ -97,8 +102,8 @@ setTimeout(function() {
                   anchor: [ 0.5, 0.98 ]
                 })
               })
-            })
-        );
+            });
+        map.addLayer( map_pin_layer );
     }
 
     /* Geolocate handler - to show current location */
@@ -124,6 +129,11 @@ setTimeout(function() {
         map_mark_location(coordinate[0], coordinate[1], 'click');
     });
 
+    map.on('moveend', function(e) {
+      var newZoom = map.getView().getZoom();
+      $("#location_zoom_level").val( Math.round(newZoom) );
+    });
+
 }, 100);
 
 $('#location_me').click(function(ev) {
@@ -136,6 +146,11 @@ $('#location_lat, #location_lng').on("change keyup", function() {
     var longitude = parseFloat( $('#location_lng').val() );
     if (!isNaN(latitude) && !isNaN(longitude)) {
         map_mark_location(longitude, latitude, 'typing');
+    }
+});
+$('#location_zoom_level').on("change keyup", function() {
+    if ($("#location_zoom_level").val() !== "") {
+        map.getView().setZoom( parseFloat( $("#location_zoom_level").val() ) );
     }
 });
 $('#location_address').click(function(ev) {
@@ -156,7 +171,9 @@ $('#location_address').click(function(ev) {
 $('#location_clear').click(function(ev) {
     $('#location_lat').val('');
     $('#location_lng').val('');
-    markers.clearMarkers();
+    if (map_pin_layer) {
+        map_pin_layer.setVisible(false);
+    }
     ev.preventDefault();
 });
 $('#location_reset').click(function(ev) {
@@ -182,33 +199,38 @@ window.map_mark_location = function(longitude, latitude, method) {
     var location = [ longitude, latitude ];
     location = ol.proj.transform(location, 'EPSG:4326', 'EPSG:3857');
     if (!map_pin_layer_feature) {
-        map_pin_layer_feature = new ol.Feature(new ol.geom.Point(location))
-        map.addLayer(
-            new ol.layer.Vector ({
+        map_pin_layer_feature = new ol.Feature(new ol.geom.Point(location)),
+        map_pin_layer = new ol.layer.Vector ({
               source: new ol.source.Vector ({
                 features: [ map_pin_layer_feature ]
               }),
               style: new ol.style.Style ({
                 image: new ol.style.Icon({
-                  src: '/lib/images/marker.png'
+                  src: '/lib/images/marker.png',
+                  anchor: [ 0.5, 0.98 ]
                 })
               })
-            })
-        );
+            });
+        map.addLayer( map_pin_layer );
     } else {
         map_pin_layer_feature.setGeometry(new ol.geom.Point(location));
+        map_pin_layer.setVisible(true);
     }
-    if (method != 'typing') {
+    if (method != 'typing' && method != 'reset') {
         $('#location_lat').val(latitude.toString());
         $('#location_lng').val(longitude.toString());
     }
     if (method != 'click') {
         map.getView().setCenter(location);
     }
-    if (method != 'click' && method != 'typing') {
-        $('#location_zoom_level').val("{{ zoom_level }}");
-        map.getView().setZoom( parseFloat("{{ zoom_level }}") );
-    } else {
+    if (method == 'reset') {
+        $('#location_zoom_level').val("{{  m.rsc[id].location_zoom_level }}");
+        {% if longitude|is_defined and latitude|is_defined %}
+            map.getView().setZoom( parseFloat("{{ m.rsc[id].location_zoom_level|default:15 }}") );
+        {% else %}
+            map.getView().setZoom( parseFloat("{{ m.rsc[id].location_zoom_level|default:m.config.mod_geomap.zoomlevel.value|default:15 }}") );
+        {% endif %}
+    } else if (method == 'click') {
         var zoom = Math.round( map.getView().getZoom() );
         $('#location_zoom_level').val( zoom.toString() );
     }
@@ -220,6 +242,5 @@ window.map_mark_location = function(longitude, latitude, method) {
 }
 
 {% endjavascript %}
-{% endwith %}
 {% endwith %}
 {% endwith %}
