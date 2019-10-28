@@ -131,11 +131,11 @@ setTimeout(function() {
 
     var is_first_moveend = true;
     map.on('moveend', function(e) {
-        if (!is_first_moveend) {
-            var newZoom = map.getView().getZoom();
+        var newZoom = map.getView().getZoom();
+        if (!is_first_moveend || newZoom != map_zoom) {
             $("#location_zoom_level").val( Math.round(newZoom) );
+            is_first_moveend = false;
         }
-        is_first_moveend = false;
     });
 
 }, 100);
