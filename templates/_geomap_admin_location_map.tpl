@@ -99,7 +99,7 @@ setTimeout(function() {
               }),
               style: new ol.style.Style ({
                 image: new ol.style.Icon({
-                  src: '/lib/images/marker.png',
+                  src: '/lib/images/marker-default.png',
                   anchor: [ 0.5, 0.98 ]
                 })
               })
@@ -211,7 +211,7 @@ window.map_mark_location = function(longitude, latitude, method) {
               }),
               style: new ol.style.Style ({
                 image: new ol.style.Icon({
-                  src: '/lib/images/marker.png',
+                  src: '/lib/images/marker-default.png',
                   anchor: [ 0.5, 0.98 ]
                 })
               })

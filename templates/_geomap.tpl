@@ -14,7 +14,7 @@ setTimeout(function() {
 
     var marker_size = new OpenLayers.Size(21,25);
     var marker_offset = new OpenLayers.Pixel(-(marker_size.w/2), -marker_size.h);
-    var marker_icon = new OpenLayers.Icon('/lib/images/marker.png', marker_size, marker_offset);
+    var marker_icon = new OpenLayers.Icon('/lib/images/marker-default.png', marker_size, marker_offset);
 
     {% if longitude|is_defined and latitude|is_defined %}
         var map_location = new OpenLayers
