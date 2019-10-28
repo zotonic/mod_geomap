@@ -1,7 +1,10 @@
 {# This template is lazy loaded from the _geomap_admin_location.tpl #}
 
+<input id="location_zoom_level" type="hidden" name="location_zoom_level" value="{{ m.rsc[id].location_zoom_level }}" />
+
 {% with m.rsc[id].computed_location_lat as latitude %}
 {% with m.rsc[id].computed_location_lng as longitude %}
+{% with m.rsc[id].location_zoom_level|default:"15" as zoom_level %}
 <div class="row">
     <div class="form-group col-md-6">
     	<label for="location_lat" class="control-label">{_ Latitude _}</label>
@@ -29,116 +32,112 @@
 	<button class="btn" id="location_reset">{_ Reset _}</button>
 </div>
 
-<div id="{{ #geomap }}" class="admin-geomap" style="height: 480px;"></div>
+<div id="{{ #geomap }}" class="admin-geomap map" style="height: 480px; margin-bottom:8px"></div>
 
-<p class="help-inline">{_ Please click on the map to select the location. _}</p>
+<p class="text-muted"><span class="fa fa-info-circle"></span> {_ Please click on the map to select the location. _}</p>
 
 {% javascript %}
-{# Hide the 'entered address' button when there is no address on the edit page #}
+{# Hide the 'entered address' button if there is no address select field on the edit page #}
 if ($('#address_country').length == 0) {
     $('#location_address').hide();
 }
 
 {# Initialize the map, with a timeout function so that the interface works before the map is loaded #}
-OpenLayers.ImgPath = '/lib/images/'
 
 var map;
-var map_location;
-var markers;
-var marker_icon;
-var marker;
 var map_geolocate;
+var map_pin_layer_feature;
 
 setTimeout(function() {
-    map = new OpenLayers.Map('{{ #geomap }}', {
-        theme: '/lib/css/openlayers/theme/default/style.css'
-    });
 
-    var layer = new OpenLayers.Layer.OSM("OpenStreetMap");
-    map.addLayer(layer);
-    markers = new OpenLayers.Layer.Markers("{_ Markers _}");
-    map.addLayer(markers);
-
-    var marker_size = new OpenLayers.Size(21,25);
-    var marker_offset = new OpenLayers.Pixel(-(marker_size.w/2), -marker_size.h);
-    marker_icon = new OpenLayers.Icon('/lib/images/marker.png', marker_size, marker_offset);
-
-    {# Center the map on the current (calculated) position #}
+    /* Center the map on the current (calculated) position */
     {% if longitude|is_defined and latitude|is_defined %}
-        var map_location = new OpenLayers
-                            .LonLat({{longitude}}, {{latitude}})
-                            .transform(
-                                new OpenLayers.Projection("EPSG:4326"),
-                                map.getProjectionObject());
-        map.setCenter(map_location, 15);
-        marker_icon.setOpacity(0.8);
-        markers.addMarker(new OpenLayers.Marker(map_location, marker_icon));
+        var map_location = [
+            {{ longitude }},
+            {{ latitude }}
+        ];
+        var map_zoom = parseFloat("{{ m.rsc[id].location_zoom_level|default:zoom_level }}");
+        var has_pin = true;
     {% else %}
-        var map_location = new OpenLayers.LonLat(0, 0);
-        map.setCenter(map_location, 2);
+        var map_location = [
+            parseFloat("{{ m.config.mod_geomap.location_lng.value|default:0 }}"),
+            parseFloat("{{ m.config.mod_geomap.location_lat.value|default:0 }}")"
+        ];
+        var map_zoom = 2;
+        var has_pin = false
     {% endif %}
+    map_location = ol.proj.transform(map_location, 'EPSG:4326', 'EPSG:3857');
 
-    {# Add the geolocation API handler #}
-    map_geolocate = new OpenLayers.Control.Geolocate({
-        bind: false,
-        geolocationOptions: {
-            enableHighAccuracy: false,
-            maximumAge: 0,
-            timeout: 7000
-        }
-    });
-    map.addControl(map_geolocate);
+    var mapOptions = {
+        target: '{{ #geomap }}',
+        theme: '/lib/css/ol.css',
+        view: new ol.View({
+            center: map_location,
+            zoom: map_zoom
+        }),
+        layers: [
+            new ol.layer.Tile({
+              source: new ol.source.OSM()
+            })
+          ]
+      };
 
-    map_geolocate.events.register("locationupdated",map_geolocate,function(e) {
-        map_geolocate.deactivate();
-        map_mark_location(e.position.coords.longitude, e.position.coords.latitude);
-        $('#location_me').removeClass('disabled');
-    });
+    map = new ol.Map(mapOptions);
 
-    {# Add the click-on-map handler #}
-    OpenLayers.Control.Click = OpenLayers.Class(OpenLayers.Control, {                
-        defaultHandlerOptions: {
-            'single': true,
-            'double': false,
-            'pixelTolerance': 0,
-            'stopSingle': false,
-            'stopDouble': false
+    if (has_pin) {
+        map_pin_layer_feature = new ol.Feature(new ol.geom.Point(map_location))
+        map.addLayer(
+            new ol.layer.Vector ({
+              source: new ol.source.Vector ({
+                features: [ map_pin_layer_feature ]
+              }),
+              style: new ol.style.Style ({
+                image: new ol.style.Icon({
+                  src: '/lib/images/marker.png',
+                  anchor: [ 0.5, 0.98 ]
+                })
+              })
+            })
+        );
+    }
+
+    /* Geolocate handler - to show current location */
+    map_geolocate = new ol.Geolocation({
+        trackingOptions: {
+            enableHighAccuracy: true
         },
-
-        initialize: function(options) {
-            this.handlerOptions = OpenLayers.Util.extend(
-                {}, this.defaultHandlerOptions
-            );
-            OpenLayers.Control.prototype.initialize.apply(
-                this, arguments
-            ); 
-            this.handler = new OpenLayers.Handler.Click(
-                this, {
-                    'click': this.trigger
-                }, this.handlerOptions
-            );
-        }, 
-
-        trigger: function(e) {
-            var lonlat = map.getLonLatFromViewPortPx(e.xy);
-            lonlat.transform(new OpenLayers.Projection("EPSG:900913"), 
-                             new OpenLayers.Projection("EPSG:4326"));
-            map_mark_location(lonlat.lon, lonlat.lat, true);
-        }
-
+        projection: mapOptions.view.getProjection()
+    });
+    map_geolocate.on('change:position', function() {
+        // 52.319567933090994
+        // 4.864136531278204
+        var coordinate = map_geolocate.getPosition();
+        map_geolocate.setTracking(false);
+        coordinate = ol.proj.transform(coordinate, 'EPSG:3857', 'EPSG:4326');
+        map_mark_location(coordinate[0], coordinate[1], 'gps');
     });
 
-    var click = new OpenLayers.Control.Click();
-    map.addControl(click);
-    click.activate();
+    /* Handle click on map to set the position */
+    map.on('singleclick', function(evt) {
+        var coordinate = evt.coordinate;
+        coordinate = ol.proj.transform(coordinate, 'EPSG:3857', 'EPSG:4326');
+        map_mark_location(coordinate[0], coordinate[1], 'click');
+    });
+
 }, 100);
 
 $('#location_me').click(function(ev) {
-    map_geolocate.activate();
+    map_geolocate.setTracking(true);
     $(this).addClass('disabled');
     ev.preventDefault();
 });
-
+$('#location_lat, #location_lng').on("change keyup", function() {
+    var latitude = parseFloat( $('#location_lat').val() );
+    var longitude = parseFloat( $('#location_lng').val() );
+    if (!isNaN(latitude) && !isNaN(longitude)) {
+        map_mark_location(longitude, latitude, 'typing');
+    }
+});
 $('#location_address').click(function(ev) {
     if ($('#address_country').length > 0) {
         var args = {
@@ -152,21 +151,21 @@ $('#location_address').click(function(ev) {
         z_notify("address_lookup", args);
         $(this).addClass('disabled');
     }
-    ev.preventDefault(); 
+    ev.preventDefault();
 });
-$('#location_clear').click(function(ev) { 
+$('#location_clear').click(function(ev) {
     $('#location_lat').val('');
     $('#location_lng').val('');
     markers.clearMarkers();
     ev.preventDefault();
 });
-$('#location_reset').click(function(ev) { 
+$('#location_reset').click(function(ev) {
     $('#location_lat').val('{{ m.rsc[id].location_lat }}');
     $('#location_lng').val('{{ m.rsc[id].location_lng }}');
     var latitude = parseFloat('{{ m.rsc[id].computed_location_lat }}');
     var longitude = parseFloat('{{ m.rsc[id].computed_location_lng }}');
     if (!isNaN(latitude) && !isNaN(longitude)) {
-        map_mark_location(longitude, latitude);
+        map_mark_location(longitude, latitude, 'reset');
     }
     ev.preventDefault();
 });
@@ -176,27 +175,51 @@ window.map_mark_location_error = function() {
     $('#location_address').removeClass('disabled');
 }
 
-window.map_mark_location = function(longitude, latitude, is_click) {
+window.map_mark_location = function(longitude, latitude, method) {
     longitude = Math.round(longitude*1000000) / 1000000;
     latitude = Math.round(latitude*1000000) / 1000000;
 
-    markers.clearMarkers();
-    var map_location = new OpenLayers
-                        .LonLat(longitude, latitude)
-                        .transform(
-                            new OpenLayers.Projection("EPSG:4326"),
-                            map.getProjectionObject());
-    marker_icon.setOpacity(0.8);
-    markers.addMarker(new OpenLayers.Marker(map_location, marker_icon));
-    $('#location_lat').val(latitude.toString());
-    $('#location_lng').val(longitude.toString());
-    if (!is_click) {
-        map.setCenter(map_location, 15);
-        z_growl_add("{_ Location has been set. _}");
-        $('#location_address').removeClass('disabled');
+    var location = [ longitude, latitude ];
+    location = ol.proj.transform(location, 'EPSG:4326', 'EPSG:3857');
+    if (!map_pin_layer_feature) {
+        map_pin_layer_feature = new ol.Feature(new ol.geom.Point(location))
+        map.addLayer(
+            new ol.layer.Vector ({
+              source: new ol.source.Vector ({
+                features: [ map_pin_layer_feature ]
+              }),
+              style: new ol.style.Style ({
+                image: new ol.style.Icon({
+                  src: '/lib/images/marker.png'
+                })
+              })
+            })
+        );
+    } else {
+        map_pin_layer_feature.setGeometry(new ol.geom.Point(location));
     }
+    if (method != 'typing') {
+        $('#location_lat').val(latitude.toString());
+        $('#location_lng').val(longitude.toString());
+    }
+    if (method != 'click') {
+        map.getView().setCenter(location);
+    }
+    if (method != 'click' && method != 'typing') {
+        $('#location_zoom_level').val("{{ zoom_level }}");
+        map.getView().setZoom( parseFloat("{{ zoom_level }}") );
+    } else {
+        var zoom = Math.round( map.getView().getZoom() );
+        $('#location_zoom_level').val( zoom.toString() );
+    }
+    if (method == 'gps' || method == 'lookup') {
+        z_growl_add("{_ Location has been set. _}");
+    }
+    $('#location_address').removeClass('disabled');
+    $('#location_me').removeClass('disabled');
 }
 
 {% endjavascript %}
+{% endwith %}
 {% endwith %}
 {% endwith %}

@@ -11,6 +11,53 @@ Uses OpenStreetMap for display of maps in the admin and on Zotonic
 websites.
 
 
+Configuration
+-------------
+
+This modules has the following configuration keys:
+
+ * `mod_geomap.provider` Either `openlayers` (default) or `googlemaps`
+ * `mod_geomap.google_api_key` The API Key for Google Maps requests
+ * `mod_geomap.location_lat` Default latitude for map views
+ * `mod_geomap.location_lng` Default longitude for map views
+
+
+Search query: geo_nearby
+------------------------
+
+The module exposes a new search query type called `geo_nearby`, which is used like this:
+
+    {% with m.search[{geo_nearby id=1306 distance=10}] as results %}
+
+Required parameters are `id` or (`lat`+`lng`), and `distance` (which
+specifies the search radius in kilometers).
+
+The results are ordered, the nearest location is given first. (When
+the `id` parameter is given, the first result is thus the id itself).
+
+Optional parameters are `cat`, which can be a list of categories to
+which to restrict the resulting resources to.
+
+
+Service: /api/geomap/nearby
+---------------------------
+
+Retrieve a list of resources with (basic) information about them, all
+of which are in the vicinity of the given resource or lat/lng pair.
+
+Internally uses the `geo_nearby` search mechanism, and has the same parameters.
+
+It returns a list of JSON objects with for each resource the following
+resource properties: id, title, summary, location_lat, location_lng,
+location_zoom_level, created, modified, publication_start, image_url.
+
+Service: /api/geomap/locations
+------------------------------
+
+The module exposes an API service at `/api/geomap/locations`, which
+returns a list of locations for the search or id given.
+
+
 Custom tag: geomap_static
 -------------------------
 
@@ -42,44 +89,3 @@ Other parameters:
 `size`
   The size in pixels of each tile, defaults to 256.
 
-
-
-Countries API
--------------
-
-The module exposes an API service at `/api/geomap/countries`, which
-returns an array of countries as installed by :ref:`mod_geomap`, with
-geographical coordinates and outline area.
-
-Every country has the following JSON object returned:
-  
-    {'geometry': {'coordinates': [[[[35.26, 31.79],
-                                                 [35.25, 31.79],
-                                                 [35.25, 31.81],
-                                                 [35.26, 31.79]]],
-                                               [[[35.62, 33.25],
-                                                 [35.65, 32.69],
-                                                 [35.55, 32.39],
-                                                 [35.28, 32.52],
-                                                 [34.88, 31.39],
-                                                 [35.48, 31.5],
-                                                 [34.98, 29.55],
-                                                 [34.9, 29.49],
-                                                 [34.27, 31.22],
-                                                 [34.33, 31.26],
-                                                 [34.49, 31.6],
-                                                 [35.1, 33.09],
-                                                 [35.62, 33.25]]]],
-                              'type': 'MultiPolygon'},
-                'id': 376,
-                'properties': {'colour': '#ccc',
-                                'name': 'Israel',
-                                'value': ''},
-                'type': 'Feature'},
-
-
-Locations API
--------------
-
-The module exposes an API service at `/api/geomap/locations`, which
-returns a list of locations for the search or id given.

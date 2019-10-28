@@ -8,9 +8,9 @@
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
 %% You may obtain a copy of the License at
-%% 
+%%
 %%     http://www.apache.org/licenses/LICENSE-2.0
-%% 
+%%
 %% Unless required by applicable law or agreed to in writing, software
 %% distributed under the License is distributed on an "AS IS" BASIS,
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -22,15 +22,15 @@
 -export([
     map_tiles/4,
     map_tiles/5,
-    
+
     url_tile/2,
     url_tile/3,
-    
+
     xy_tile/2,
     xy_tile/3,
-    
+
     bounding_box/3,
-    
+
     zoom/0
 ]).
 
@@ -48,7 +48,7 @@ zoom() ->
 -spec map_tiles(Latitude::float(), Longitude::float(), Cols::integer(), Rows::integer()) -> {ok,list(),{integer(),integer()}}.
 map_tiles(Latitude, Longitude, Cols, Rows) ->
     map_tiles(Latitude, Longitude, Cols, Rows, ?ZOOM).
-    
+
 -spec map_tiles(Latitude::float(), Longitude::float(), Cols::integer(), Rows:: integer(), Zoom::integer()) -> {ok,list(),{float(),float()}}.
 map_tiles(Latitude, Longitude, Cols, Rows, Zoom) ->
     {X, Y} = xy_tile(Latitude, Longitude, Zoom),
@@ -76,7 +76,7 @@ map_tiles(Latitude, Longitude, Cols, Rows, Zoom) ->
                         1 -> X
                     end,
         CenteredY = case Rows rem 2 of
-                        0 -> 
+                        0 ->
                             case OffsetY < HalfY of
                                 true -> Y;
                                 false -> Y+1
@@ -93,9 +93,9 @@ map_tiles(Latitude, Longitude, Cols, Rows, Zoom) ->
         LatOffset = abs(North-Latitude),
         LongPerTile = abs(East-West),
         LatPerTile = abs(North-South),
-        {float(XTile) + (1-LongOffset/LongPerTile), 
+        {float(XTile) + (1-LongOffset/LongPerTile),
          float(YTile) + LatOffset/LatPerTile}.
-    
+
     offset(F, [H|T], N) ->
         case F(H) of
             true -> N;

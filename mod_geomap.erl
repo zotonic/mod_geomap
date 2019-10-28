@@ -1,15 +1,15 @@
 %% @author Marc Worrell <marc@worrell.nl>
-%% @copyright 2012-2016 Marc Worrell
-%% @doc Geo mapping support using OpenStreetMaps
+%% @copyright 2012-2019 Marc Worrell
+%% @doc Geo mapping support using OpenStreetMaps and GoogleMaps
 
-%% Copyright 2012-2016 Marc Worrell
+%% Copyright 2012-2019 Marc Worrell
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
 %% You may obtain a copy of the License at
-%% 
+%%
 %%     http://www.apache.org/licenses/LICENSE-2.0
-%% 
+%%
 %% Unless required by applicable law or agreed to in writing, software
 %% distributed under the License is distributed on an "AS IS" BASIS,
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -26,46 +26,43 @@
 
 -export([
     event/2,
-    
+
     observe_rsc_get/3,
+    observe_search_query/2,
     observe_pivot_update/3,
     observe_pivot_fields/3,
 
     observe_postback_notify/2,
 
     find_geocode/3,
-    find_geocode_api/3
+    find_geocode_api/3,
+
+    googlemaps/2
 ]).
 
 -include_lib("zotonic.hrl").
 
 
-observe_postback_notify(#postback_notify{message="geomap_cluster", target=TargetId}, Context) ->
+observe_postback_notify(#postback_notify{ message="geomap_cluster", target=TargetId }, Context) ->
     Ids = [ z_context:get_q("id", Context) | z_context:get_q("ids", Context, []) ],
     Ids1 = [ m_rsc:rid(Id, Context) || Id <- Ids ],
-    Ids2 = lists:filter(fun
-                            (undefined) -> false;
-                            (Id) -> is_integer(Id) andalso m_rsc:is_visible(Id, Context)
-                        end,
+    Ids2 = lists:filter(fun (Id) -> is_integer(Id) andalso m_rsc:is_visible(Id, Context) end,
                         Ids1),
     z_render:update(TargetId, #render{template="_geomap_popup_cluster.tpl", vars=[{ids, Ids2}]}, Context);
 observe_postback_notify(_, _Context) ->
     undefined.
 
 %% @doc Popup the geomap information
-event(#postback_notify{message="geomap_popup", target=TargetId}, Context) ->
+event(#postback_notify{ message="geomap_popup", target=TargetId }, Context) ->
     Ids = [ z_context:get_q("id", Context) | z_context:get_q("ids", Context, []) ],
     Ids1 = [ m_rsc:rid(Id, Context) || Id <- Ids ],
-    Ids2 = lists:filter(fun
-                            (undefined) -> false;
-                            (Id) -> m_rsc:is_visible(Id, Context)
-                        end,
+    Ids2 = lists:filter(fun (Id) -> is_integer(Id) andalso m_rsc:is_visible(Id, Context) end,
                         Ids1),
     z_render:update(TargetId, #render{template="_geomap_popup.tpl", vars=[{ids, Ids2}]}, Context);
 
 %% @doc Handle an address lookup from the admin.
-%% @todo Maybe add check if the user is allowed to use the admin.
-event(#postback_notify{message="address_lookup"}, Context) ->
+event(#postback_notify{ message="address_lookup" }, Context) ->
+    %% TODO: Maybe add check if the user is allowed to use the admin.
     {ok, Type, Q} = q([
             {address_street_1, z_context:get_q("street", Context)},
             {address_city, z_context:get_q("city", Context)},
@@ -77,15 +74,25 @@ event(#postback_notify{message="address_lookup"}, Context) ->
         {error, _} ->
             z_script:add_script("map_mark_location_error();", Context);
         {ok, {Lat, Long}} ->
-            z_script:add_script(io_lib:format("map_mark_location(~p,~p);", [Long, Lat]), Context)
+            z_script:add_script(io_lib:format("map_mark_location(~p,~p, 'lookup');", [Long, Lat]), Context)
     end.
-
 
 %% @doc Append computed latitude and longitude values to the resource.
 observe_rsc_get(#rsc_get{}, Props, _Context) ->
     case proplists:get_value(pivot_geocode, Props) of
-        undefined -> 
-            Props;
+        undefined ->
+            Lat = proplists:get_value(location_lat, Props),
+            Long = proplists:get_value(location_lng, Props),
+            case is_number(Lat) andalso is_number(Long) of
+                true ->
+                    [
+                        {computed_location_lat, Lat},
+                        {computed_location_lng, Long}
+                        | Props
+                    ];
+                false ->
+                    Props
+            end;
         Quadtile ->
             {Lat, Long} = geomap_quadtile:decode(Quadtile),
             [
@@ -95,6 +102,8 @@ observe_rsc_get(#rsc_get{}, Props, _Context) ->
             ]
     end.
 
+observe_search_query(#search_query{}=Q, Context) ->
+    geomap_search:search_query(Q, Context).
 
 %% @doc Check if the latitude/longitude are set, if so the pivot the pivot_geocode.
 %%      If not then try to derive the lat/long from the rsc's address data.
@@ -103,54 +112,61 @@ observe_pivot_update(#pivot_update{}, KVs, _Context) ->
           catch z_convert:to_float(proplists:get_value(location_lng, KVs))}
     of
         {Lat, Long} when is_float(Lat), is_float(Long) ->
-            [ 
+            [
                 {pivot_geocode, geomap_quadtile:encode(Lat, Long)},
                 {pivot_geocode_qhash, undefined}
                 | KVs
             ];
-        _ -> 
+        _ ->
             KVs
     end.
 
 
-%% @doc Check if the latitude/longitude are set, if so the pivot the pivot_geocode.
+%% @doc Check if the latitude/longitude are set, if so then pivot the pivot_geocode.
 %%      If not then try to derive the lat/long from the rsc's address data.
-observe_pivot_fields(#pivot_fields{rsc=R}, KVs, Context) ->
+observe_pivot_fields(#pivot_fields{ rsc = R }, KVs, Context) ->
     case {catch z_convert:to_float(proplists:get_value(location_lat, R)),
           catch z_convert:to_float(proplists:get_value(location_lng, R))}
     of
         {Lat, Long} when is_float(Lat), is_float(Long) ->
-            [ 
+            [
                 {pivot_geocode, geomap_quadtile:encode(Lat, Long)},
-                {pivot_geocode_qhash, undefined} 
+                {pivot_geocode_qhash, undefined}
                 | KVs
             ];
         _ ->
             % Optionally geocode the address in the resource.
             % When successful this will spawn a new geocode pivot.
             case optional_geocode(R, Context) of
-                reset -> 
-                    [ 
+                reset ->
+                    [
                         {pivot_geocode, undefined},
-                        {pivot_geocode_qhash, undefined} 
+                        {pivot_geocode_qhash, undefined}
                         | KVs
                     ];
                 {ok, Lat, Long, QHash} ->
-                    [ 
+                    KVs1 = proplists:delete(
+                        pivot_location_lat,
+                        proplists:delete( pivot_location_lng, KVs)),
+                    [
                         {pivot_geocode, geomap_quadtile:encode(Lat, Long)},
-                        {pivot_geocode_qhash, QHash} 
-                        | KVs
+                        {pivot_geocode_qhash, QHash},
+                        {pivot_location_lat, Lat},
+                        {pivot_location_lng, Long}
+                        | KVs1
                     ];
-                ok -> 
+                ok ->
                     KVs
             end
     end.
 
 
-
 %% @doc Check if we should lookup the location belonging to the resource.
 %%      If so we store the quadtile code into the resource without a re-pivot.
 optional_geocode(R, Context) ->
+    %% TODO: use the sha(qhash) to check known locations, this prevents multiple lookups
+    %%       for the same address. (need to be placed in separate lookup table, so
+    %%       that we can refresh after some time).
     Lat = proplists:get_value(location_lat, R),
     Long = proplists:get_value(location_long, R),
     case z_utils:is_empty(Lat) andalso z_utils:is_empty(Long) of
@@ -164,7 +180,7 @@ optional_geocode(R, Context) ->
                     LocHash = crypto:hash(md5, Q),
                     case proplists:get_value(pivot_geocode_qhash, R) of
                         LocHash ->
-                            % Not changed since last lookup 
+                            % Not changed since last lookup
                             ok;
                         _ ->
                             % Changed, and we are doing automatic lookups
@@ -185,10 +201,11 @@ find_geocode(Q, Type, Context) ->
             OK;
         {error, notfound} ->
             Q1 = maybe_expand_country(Q, Type, Context),
-            find_geocode_api(Q1, Type, Context) 
+            find_geocode_api(Q1, Type, Context)
     end.
 
 %% @doc Check with Google and OpenStreetMap if they know the address
+%% TODO: cache the lookup result (max 1 req/sec for Nominatim)
 find_geocode_api(Q, country, Context) ->
     Qq = mochiweb_util:quote_plus(Q),
     openstreetmap(Qq, Context);
@@ -229,21 +246,32 @@ googlemaps_check(Q, Context) ->
     case z_depcache:get(googlemaps_error, Context) of
         undefined ->
             case googlemaps(Q, Context) of
-                {error, query_limit} = Error ->
-                    lager:warning("Geomap: Google reached query limit, disabling for 1800 sec"),
-                    z_depcache:set(googlemaps_error, Error, 1800, Context),
+                {error, ratelimit} = Error ->
+                    lager:warning("Geomap: Google reached query limit, disabling for 900 sec"),
+                    z_depcache:set(googlemaps_error, Error, 900, Context),
+                    Error;
+                {error, denied} = Error ->
+                    lager:warning("Geomap: Google denied the request, disabling for 3600 sec"),
+                    z_depcache:set(googlemaps_error, Error, 3600, Context),
                     Error;
                 Result ->
                     Result
             end;
-        {ok, Error} -> 
+        {ok, Error} ->
             lager:debug("Geomap: skipping Google lookup due to ~p", [Error]),
             Error
     end.
 
 googlemaps(Q, Context) ->
-    Url = "https://maps.googleapis.com/maps/api/geocode/json?sensor=false&address="++Q,
-    case get_json(Url, Context) of
+    Url = "https://maps.googleapis.com/maps/api/geocode/json?address="++Q,
+    Url1 = case m_config:get_value(mod_geomap, google_api_key, Context) of
+        undefined -> Url;
+        <<>> -> Url;
+        "" -> Url;
+        ApiKey ->
+            Url ++ "&key=" ++ z_convert:to_list(ApiKey)
+    end,
+    case get_json(Url1, Context) of
         {ok, []} ->
             lager:debug("Google maps empty return for ~p", [Q]),
             {error, not_found};
@@ -274,7 +302,13 @@ googlemaps(Q, Context) ->
                 <<"ZERO_RESULTS">> ->
                     {error, not_found};
                 <<"OVER_QUERY_LIMIT">> ->
-                    {error, query_limit};
+                    lager:info("GoogleMaps api error: 'OVER_QUERY_LIMIT', message is ~p",
+                               [ proplists:get_value(<<"error_message">>, Props) ]),
+                    {error, ratelimit};
+                <<"REQUEST_DENIED">> ->
+                    lager:warning("GoogleMaps api error: 'REQUEST_DENIED', message is ~p",
+                                  [ proplists:get_value(<<"error_message">>, Props) ]),
+                    {error, denied};
                 Status ->
                     lager:warning("Google maps status ~p on ~p", [Status, Q]),
                     {error, unexpected_result}
@@ -328,7 +362,7 @@ q(R, Context) ->
     case Fs of
         <<>> ->
             {ok, country, iolist_to_binary(p(address_country, <<>>, R))};
-        _ -> 
+        _ ->
             Country = iolist_to_binary(country_name(proplists:get_value(address_country, R), Context)),
             {ok, full, <<Fs/binary, Country/binary>>}
     end.
