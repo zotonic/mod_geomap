@@ -176,13 +176,14 @@ xy_tile(Latitude, Longitude, Zoom) ->
     {long2tile(Longitude, Zoom), lat2tile(Latitude, Zoom)}.
 
 long2tile(Longitude, Zoom) ->
-    floor((Longitude+180.0)/360.0 * math:pow(2,Zoom)).
+    floor1((Longitude+180.0)/360.0 * math:pow(2,Zoom)).
 
 lat2tile(Latitude, Zoom) ->
-    floor((1-math:log(math:tan(Latitude*math:pi()/180.0) + 1/math:cos(Latitude*math:pi()/180)) / math:pi()) /2.0 * math:pow(2,Zoom)).
+    floor1((1-math:log(math:tan(Latitude*math:pi()/180.0) + 1/math:cos(Latitude*math:pi()/180)) / math:pi()) /2.0 * math:pow(2,Zoom)).
 
 %% From http://schemecookbook.org/Erlang/NumberRounding
-floor(X) ->
+%% For older OTP versions, replace with erlang:floor/1 when phasing out support.
+floor1(X) ->
     T = erlang:trunc(X),
     case (X - T) of
         Neg when Neg < 0 -> T - 1;
