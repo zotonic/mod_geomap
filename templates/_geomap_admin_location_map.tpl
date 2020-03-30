@@ -49,8 +49,12 @@ setTimeout(function() {
     map = new OpenLayers.Map('{{ #geomap }}', {
         theme: '/lib/css/openlayers/theme/default/style.css'
     });
-
-    var layer = new OpenLayers.Layer.OSM("OpenStreetMap");
+    var url = [
+        'https://a.tile.openstreetmap.de/${z}/${x}/${y}.png',
+        'https://b.tile.openstreetmap.de/${z}/${x}/${y}.png',
+        'https://c.tile.openstreetmap.de/${z}/${x}/${y}.png'
+    ];
+    var layer = new OpenLayers.Layer.OSM("OpenStreetMap", url);
     map.addLayer(layer);
     markers = new OpenLayers.Layer.Markers("{_ Markers _}");
     map.addLayer(markers);

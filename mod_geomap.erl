@@ -92,13 +92,22 @@ observe_pivot_update(#pivot_update{}, KVs, _Context) ->
           catch z_convert:to_float(proplists:get_value(location_lng, KVs))}
     of
         {Lat, Long} when is_float(Lat), is_float(Long) ->
-            [ 
+            [
                 {pivot_geocode, geomap_quadtile:encode(Lat, Long)},
                 {pivot_geocode_qhash, undefined}
                 | KVs
             ];
-        _ -> 
-            KVs
+        _ ->
+            case z_utils:is_empty(proplists:get_value(address_country, KVs)) of
+                true ->
+                    [
+                        {pivot_geocode, undefined},
+                        {pivot_geocode_qhash, undefined}
+                        | KVs
+                    ];
+                false ->
+                    KVs
+            end
     end.
 
 
@@ -150,7 +159,7 @@ optional_geocode(R, Context) ->
                 {ok, _, <<>>} ->
                     reset;
                 {ok, Type, Q} ->
-                    LocHash = crypto:md5(Q),
+                    LocHash = crypto:hash(md5, Q),
                     case proplists:get_value(pivot_geocode_qhash, R) of
                         LocHash ->
                             % Not changed since last lookup 
@@ -168,13 +177,15 @@ optional_geocode(R, Context) ->
     end.
 
 
+find_geocode(<<>>, _Type, _Context) ->
+    {error, not_found};
 find_geocode(Q, Type, Context) ->
     case geomap_precoded:find_geocode(Q, Type) of
         {ok, {_, _}} = OK ->
             OK;
-        {error, notfound} ->
+        {error, not_found} ->
             Q1 = maybe_expand_country(Q, Type, Context),
-            find_geocode_api(Q1, Type, Context) 
+            find_geocode_api(Q1, Type, Context)
     end.
 
 %% @doc Check with Google and OpenStreetMap if they know the address
@@ -192,7 +203,7 @@ find_geocode_api(Q, _Type, Context) ->
 
 
 openstreetmap(Q, Context) ->
-    Url = "http://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=0&q="++Q,
+    Url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=0&q="++Q,
     case get_json(Url, Context) of
         {ok, [{struct, Props}|_]} ->
             case {z_convert:to_float(proplists:get_value(<<"lat">>, Props)),
@@ -278,6 +289,7 @@ googlemaps(Q, Context) ->
 
 
 get_json(Url, Context) ->
+    lager:debug("Geo lookup: ~p", [Url]),
     Hs = [
         {"referer", z_convert:to_list(z_context:abs_url("/", Context))},
         {"User-Agent", "Zotonic"}
@@ -308,18 +320,22 @@ get_json(Url, Context) ->
 
 
 q(R, Context) ->
-    Fs = iolist_to_binary([
-        p(address_street_1, $,, R),
-        p(address_city, $,, R),
-        p(address_state, $,, R),
-        remove_ws(p(address_postcode, $,, R))
-    ]),
-    case Fs of
+    case iolist_to_binary(country_name(proplists:get_value(address_country, R), Context)) of
         <<>> ->
-            {ok, country, iolist_to_binary(p(address_country, <<>>, R))};
-        _ -> 
-            Country = iolist_to_binary(country_name(proplists:get_value(address_country, R), Context)),
-            {ok, full, <<Fs/binary, Country/binary>>}
+            {ok, full, <<>>};
+        Country ->
+            Fs = iolist_to_binary([
+                p(address_street_1, $,, R),
+                p(address_city, $,, R),
+                p(address_state, $,, R),
+                remove_ws(p(address_postcode, $,, R))
+            ]),
+            case Fs of
+                <<>> ->
+                    {ok, country, Country};
+                _ ->
+                    {ok, full, <<Fs/binary, Country/binary>>}
+            end
     end.
 
 remove_ws(V) ->
