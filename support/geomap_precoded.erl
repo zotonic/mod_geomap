@@ -25,4 +25,4 @@
 
 
 find_geocode(<<"de">>, country) -> {ok, {51.0834196, 10.4234469}};
-find_geocode(_, _) -> {error, notfound}.
+find_geocode(_, _) -> {error, not_found}.

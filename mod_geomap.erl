@@ -118,7 +118,16 @@ observe_pivot_update(#pivot_update{}, KVs, _Context) ->
                 | KVs
             ];
         _ ->
-            KVs
+            case z_utils:is_empty(proplists:get_value(address_country, KVs)) of
+                true ->
+                    [
+                        {pivot_geocode, undefined},
+                        {pivot_geocode_qhash, undefined}
+                        | KVs
+                    ];
+                false ->
+                    KVs
+            end
     end.
 
 
@@ -246,13 +255,15 @@ find_geocode(Q, Type, Context) ->
     case geomap_precoded:find_geocode(Q, Type) of
         {ok, {_, _}} = OK ->
             OK;
-        {error, notfound} ->
+        {error, not_found} ->
             Q1 = maybe_expand_country(Q, Type, Context),
             find_geocode_api(Q1, Type, Context)
     end.
 
 %% @doc Check with Google and OpenStreetMap if they know the address
 %% TODO: cache the lookup result (max 1 req/sec for Nominatim)
+find_geocode_api(<<>>, _Type, _Context) ->
+    {error, not_found};
 find_geocode_api(Q, country, Context) ->
     Qq = mochiweb_util:quote_plus(Q),
     openstreetmap(Qq, Context);
@@ -400,18 +411,23 @@ get_json(Url, Context) ->
 
 
 q(R, Context) ->
-    Fs = iolist_to_binary([
-        p(address_street_1, $,, R),
-        p(address_city, $,, R),
-        p(address_state, $,, R),
-        remove_ws(p(address_postcode, $,, R))
-    ]),
-    case Fs of
+    case iolist_to_binary(p(address_country, <<>>, R)) of
         <<>> ->
-            {ok, country, iolist_to_binary(p(address_country, <<>>, R))};
-        _ ->
-            Country = iolist_to_binary(country_name(proplists:get_value(address_country, R), Context)),
-            {ok, full, <<Fs/binary, Country/binary>>}
+            {ok, country, <<>>};
+        Country ->
+            Fs = iolist_to_binary([
+                p(address_street_1, $,, R),
+                p(address_city, $,, R),
+                p(address_state, $,, R),
+                remove_ws(p(address_postcode, $,, R))
+            ]),
+            case Fs of
+                <<>> ->
+                    {ok, country, Country};
+                _ ->
+                    Country = iolist_to_binary(country_name(Country, Context)),
+                    {ok, full, <<Fs/binary, Country/binary>>}
+            end
     end.
 
 remove_ws(V) ->
