@@ -87,7 +87,7 @@ msgstr "Lees meer"
 #: ./modules/mod_geomap/templates/_geomap_admin_location_map.tpl:28 
 msgid ""
 "Reset"
-msgstr "Overnieuw"
+msgstr "Opnieuw"
 
 #: ./modules/mod_geomap/templates/_geomap_admin_location_map.tpl:25 
 msgid ""
