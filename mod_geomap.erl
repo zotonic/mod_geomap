@@ -425,8 +425,8 @@ q(R, Context) ->
                 <<>> ->
                     {ok, country, Country};
                 _ ->
-                    Country = iolist_to_binary(country_name(Country, Context)),
-                    {ok, full, <<Fs/binary, Country/binary>>}
+                    CountryName = iolist_to_binary(country_name(Country, Context)),
+                    {ok, full, <<Fs/binary, CountryName/binary>>}
             end
     end.
 
